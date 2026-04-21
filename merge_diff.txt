@@ -1,0 +1,1295 @@
+diff --git a/.eslintignore b/.eslintignore
+deleted file mode 100644
+index 3897265..0000000
+--- a/.eslintignore
++++ /dev/null
+@@ -1,13 +0,0 @@
+-.DS_Store
+-node_modules
+-/build
+-/.svelte-kit
+-/package
+-.env
+-.env.*
+-!.env.example
+-
+-# Ignore files for PNPM, NPM and YARN
+-pnpm-lock.yaml
+-package-lock.json
+-yarn.lock
+diff --git a/.eslintrc.cjs b/.eslintrc.cjs
+deleted file mode 100644
+index f73200d..0000000
+--- a/.eslintrc.cjs
++++ /dev/null
+@@ -1,25 +0,0 @@
+-module.exports = {
+-	root: true,
+-	parser: '@typescript-eslint/parser',
+-	extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended', 'prettier'],
+-	plugins: ['svelte', '@typescript-eslint'],
+-	ignorePatterns: ['*.cjs'],
+-	overrides: [
+-		{
+-			files: ['*.svelte'],
+-			parser: 'svelte-eslint-parser',
+-			parserOptions: {
+-				parser: '@typescript-eslint/parser'
+-			}
+-		}
+-	],
+-	parserOptions: {
+-		sourceType: 'module',
+-		ecmaVersion: 2020
+-	},
+-	env: {
+-		browser: true,
+-		es2017: true,
+-		node: true
+-	}
+-};
+diff --git a/.github/workflows/lint.yml b/.github/workflows/lint.yml
+index 354947a..66ace2d 100644
+--- a/.github/workflows/lint.yml
++++ b/.github/workflows/lint.yml
+@@ -11,9 +11,9 @@ jobs:
+     runs-on: ubuntu-latest
+ 
+     steps:
+-      - uses: actions/checkout@v3
+-      - uses: actions/setup-node@v3
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
+         with:
+-          node-version: 16
+-      - run: npm i
++          node-version: 24
++      - run: npm ci
+       - run: npm run lint
+diff --git a/.nvmrc b/.nvmrc
+index 2bd5a0a..a45fd52 100644
+--- a/.nvmrc
++++ b/.nvmrc
+@@ -1 +1 @@
+-22
++24
+diff --git a/docs/code-wiki/README.md b/docs/code-wiki/README.md
+new file mode 100644
+index 0000000..008e51f
+--- /dev/null
++++ b/docs/code-wiki/README.md
+@@ -0,0 +1,27 @@
++# Code Wiki（Hakuba / svelte-blog）
++
++本 Wiki 面向仓库维护者与二次开发者，聚焦“代码怎么组织、数据怎么流、如何运行/部署、关键模块与接口”。
++
++## 1. 项目定位
++
++- **类型**：基于 **SvelteKit + TypeScript** 的静态博客/站点
++- **数据源**：GitHub Discussions（GraphQL API 拉取 discussions 内容）
++- **核心机制**：构建前脚本把 discussions 转成本地 Markdown 源文件（被 mdsvex 编译为 Svelte 组件）；运行时通过 `import.meta.glob` 聚合这些 Markdown 模块并渲染路由页面
++
++## 2. 快速索引
++
++- [整体架构与数据流](./architecture.md)
++- [模块与目录职责](./modules.md)
++- [关键类型/函数/入口说明](./key-apis.md)
++- [依赖关系（包/模块）](./dependencies.md)
++- [运行与部署手册（Runbook）](./runbook.md)
++
++## 3. 关键入口一览
++
++- **构建前数据生成**：`npm run generateData` → [.scripts/pre/index.ts](file:///workspace/.scripts/pre/index.ts)
++- **完整构建**：`npm run build`（生成数据 → `vite build` → sitemap）→ [package.json](file:///workspace/package.json)
++- **站点路由入口**：
++  - 列表页/分页/标签：[[...index=pageMatcher].svelte](file:///workspace/src/routes/%5B...index=pageMatcher%5D.svelte)
++  - 文章详情：[[post]@withoutHeader.svelte](file:///workspace/src/routes/post/%5Bpost%5D@withoutHeader.svelte)
++  - 独立页面：[[page].svelte](file:///workspace/src/routes/%5Bpage%5D.svelte)
++  - Atom Feed：[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts)
+diff --git a/docs/code-wiki/architecture.md b/docs/code-wiki/architecture.md
+new file mode 100644
+index 0000000..5e5a2ef
+--- /dev/null
++++ b/docs/code-wiki/architecture.md
+@@ -0,0 +1,57 @@
++# 整体架构与数据流
++
++## 1. 架构分层
++
++- **构建期（数据侧）**：`.scripts/pre/*` 从 GitHub GraphQL 拉取 discussions → 写入本地 Markdown 源文件 + `.env.local`
++- **构建期（站点侧）**：SvelteKit 预渲染 + mdsvex 把 Markdown 编译为可渲染的 Svelte 组件
++- **运行期（站点侧）**：路由 `load()` 通过 `import.meta.glob()` 聚合 Markdown 模块 → 过滤/排序/分页 → 组件渲染
++- **构建后（产物侧）**：`.scripts/post/index.ts`（可选）生成 sitemap
++
++## 2. 数据流（从 Discussions 到页面）
++
++```mermaid
++flowchart LR
++  A[GitHub Discussions] -->|GraphQL| B[.scripts/pre/fetcher.ts]
++  B --> C[discussions 列表]
++  C --> D[.scripts/pre/filter.ts\nfindConfig/filterPost/filterPage]
++  C --> E[.scripts/pre/converter.ts\nconvertFrontMatter]
++  D --> F[posts/pages 列表]
++  E --> F
++  F --> G[.scripts/pre/writer.ts\nwritePosts/writePages]
++  D --> H[config]
++  H --> I[.scripts/pre/writer.ts\nwriteEnv -> .env.local]
++  G --> J[src/routes/post/_source/*.md]
++  G --> K[src/routes/_page/*.md]
++  J -->|mdsvex 编译| L[SvelteKit build / prerender]
++  K -->|mdsvex 编译| L
++  L --> M[build/ 静态站点]
++  M --> N[.scripts/post/index.ts\nsvelte-sitemap]
++```
++
++## 3. 配置注入链路（VITE\_\*）
++
++- `.scripts/pre/index.ts` 将 config 与环境变量合并，最终写入 `.env.local`
++  - 入口：[.scripts/pre/index.ts](file:///workspace/.scripts/pre/index.ts)
++  - 写入逻辑：[writeEnv](file:///workspace/.scripts/pre/writer.ts#L28-L33)
++- 前端运行时通过 [constants.ts](file:///workspace/src/lib/constants.ts) 使用 `import.meta.env.VITE_*` 读取
++- 典型使用点：
++  - SEO/站点信息：`BLOG_NAME / DESCRIPTION / KEYWORDS`（布局页 [\_\_layout-withoutHeader.svelte](file:///workspace/src/routes/__layout-withoutHeader.svelte#L21-L35)）
++  - Atom feed：`DOMAIN`（[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts#L6-L10)）
++  - 评论：`USER_NAME / REPOSITORY / COMMENT`（[Giscus.svelte](file:///workspace/src/lib/components/Giscus.svelte#L1-L25)）
++
++## 4. 关键设计点
++
++### 4.1 “内容即代码”的实现方式
++
++- 讨论内容被落盘为：
++  - 文章：`src/routes/post/_source/[number].md`（由 [writePosts](file:///workspace/.scripts/pre/writer.ts#L5-L15) 写入）
++  - 页面：`src/routes/_page/[title].md`（由 [writePages](file:///workspace/.scripts/pre/writer.ts#L17-L26) 写入）
++- mdsvex 将 `.md` 作为路由可消费的模块，模块形态在运行期被 `import.meta.glob()` 动态加载：
++  - posts：[fetchPosts](file:///workspace/src/lib/helper/fetchPosts.ts#L9-L50)
++  - pages：[fetchPages](file:///workspace/src/lib/helper/fetchPage.ts#L9-L25)
++
++### 4.2 国际化/语言处理（HTML lang）
++
++- Hook 在服务端渲染阶段替换 `app.html` 中的 `%lang%` 占位符
++- 逻辑：根据 route id 决定读取 post/page 的 `metadata.lang`，否则回退到 `LANGUAGE`
++- 入口：[hooks.server.ts](file:///workspace/src/hooks.server.ts#L6-L34)
+diff --git a/docs/code-wiki/dependencies.md b/docs/code-wiki/dependencies.md
+new file mode 100644
+index 0000000..1bf8a21
+--- /dev/null
++++ b/docs/code-wiki/dependencies.md
+@@ -0,0 +1,79 @@
++# 依赖关系（Packages / Modules）
++
++## 1. 技术栈与版本约束
++
++- Node.js：`>=22`（见 [package.json](file:///workspace/package.json#L4-L6)）
++- Svelte：`^5.x`
++- SvelteKit：`^2.x`
++- TypeScript：`5.9.x`
++- 构建：Vite `^8.x`
++- 输出：`@sveltejs/adapter-static`（静态站点，fallback `404.html`）
++
++## 2. 关键三方包（按职责）
++
++### 2.1 框架与构建
++
++- `@sveltejs/kit`：路由、SSR/Prerender、load/hook 等框架能力
++- `@sveltejs/adapter-static`：静态导出
++- `vite` / `@sveltejs/kit/vite`：开发服务器与构建
++- `tsx`：执行 TypeScript 脚本（用于 `.scripts/*`）
++
++### 2.2 Markdown 管线（内容编译）
++
++- `mdsvex`：把 `.md` 作为 Svelte 组件/路由内容
++- `rehype-*`：Markdown → HTML 处理链
++  - `rehype-slug`：标题生成 id
++  - `rehype-autolink-headings`：标题自动链接
++  - `rehype-external-links`：外链 target=\_blank
++  - `rehype-add-classes`：给标题加 class（用于样式）
++- 配置入口：[svelte.config.js](file:///workspace/svelte.config.js#L1-L41)
++
++### 2.3 数据拉取与格式化（构建期）
++
++- `node-fetch`：调用 GitHub GraphQL
++- `dotenv`：读取 `.env` 与解析 discussion 里的 dotenv 文本
++- `yaml`：解析/生成 Markdown front matter（YAML）
++
++### 2.4 SEO / Feed / Sitemap
++
++- `feed`：生成 Atom XML（[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts)）
++- `svelte-sitemap`：构建后生成 sitemap（[.scripts/post/index.ts](file:///workspace/.scripts/post/index.ts)）
++
++### 2.5 UI / 样式 / 图标
++
++- `tailwindcss` + `@tailwindcss/typography`：样式与 prose 排版（见 `app.css`、[Article.svelte](file:///workspace/src/lib/components/Article.svelte)）
++- `@fortawesome/fontawesome-free`：分页箭头 SVG（[Pagination.svelte](file:///workspace/src/lib/components/Pagination.svelte#L1-L4)）
++- `clsx`：className 拼接（[Pagination.svelte](file:///workspace/src/lib/components/Pagination.svelte#L1-L4)）
++- `@giscus/svelte`：评论组件封装（[Giscus.svelte](file:///workspace/src/lib/components/Giscus.svelte#L1-L25)）
++
++## 3. 内部模块依赖（高层图）
++
++```mermaid
++flowchart TD
++  subgraph Scripts[.scripts]
++    Pre[pre/index.ts] --> Fetcher[pre/fetcher.ts]
++    Pre --> Filter[pre/filter.ts]
++    Pre --> Converter[pre/converter.ts]
++    Pre --> Writer[pre/writer.ts]
++  end
++
++  subgraph Runtime[src runtime]
++    Routes[src/routes/*] --> Helper[src/lib/helper/*]
++    Routes --> Components[src/lib/components/*]
++    Helper --> Types[src/lib/types/*]
++    Routes --> Constants[src/lib/constants.ts]
++    Components --> Constants
++  end
++
++  Writer --> GeneratedPosts[src/routes/post/_source/*.md]
++  Writer --> GeneratedPages[src/routes/_page/*.md]
++
++  GeneratedPosts --> Helper
++  GeneratedPages --> Helper
++```
++
++## 4. “依赖方向”约定（便于扩展/重构）
++
++- `src/routes/*` 依赖 `src/lib/*`，避免反向依赖（lib 不引用 routes）
++- `.scripts/*` 独立于 `src/lib/*`（当前已分离），减少构建期与运行期耦合
++- 运行期对内容的读取全部集中在 `src/lib/helper/*`，路由层只做参数解析与 UI 组合
+diff --git a/docs/code-wiki/key-apis.md b/docs/code-wiki/key-apis.md
+new file mode 100644
+index 0000000..3c62b0d
+--- /dev/null
++++ b/docs/code-wiki/key-apis.md
+@@ -0,0 +1,145 @@
++# 关键类型 / 函数 / 入口说明
++
++## 1. 构建期（Data Generation）
++
++### 1.1 `.scripts/pre/index.ts`：生成数据总入口
++
++代码：[index.ts](file:///workspace/.scripts/pre/index.ts#L1-L48)
++
++职责：
++
++- 读取 `.env` / 环境变量（`dotenv.config()`）
++- `fetchUser()` 获取 GitHub viewer 信息（login/url/bio）
++- `fetchAllDiscussions()` 拉取目标仓库 discussions 列表
++- `findConfig()` 从指定 category 的 `title=index` discussion 中解析 dotenv 文本为 config 对象
++- 合并 config：优先级 `config[key]` → `process.env[key]` → 默认值（部分来自 viewer）
++- `convertFrontMatter()` 把 discussions 元字段合入 Markdown front matter
++- `filterPage/filterPost()` 按分类拆分 page/post
++- `writePosts/writePages/writeEnv()` 落盘
++
++输入（关键环境变量）：
++
++- `GITHUB_TOKEN`：必需（GraphQL API bearer token）
++- `REPOSITORY`：必需（仓库名，不含 owner）
++- `CONFIG_CATEGORY/POST_CATEGORY/PAGE_CATEGORY`：可选（默认 `Config/Post/Page`）
++
++输出（构建产物中的“源内容”）：
++
++- `src/routes/post/_source/*.md`
++- `src/routes/_page/*.md`
++- `.env.local`（所有键写为 `VITE_*`）
++
++### 1.2 `fetcher.ts`：GitHub GraphQL 拉取
++
++代码：[fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L7-L103)
++
++- `fetchData<T>(query: string): Promise<T>`
++  - 统一 GraphQL POST 调用
++  - 若缺失 `GITHUB_TOKEN`，直接抛错（避免静默失败）
++- `fetchUser()`
++  - 查询 `viewer { login url bio }`
++- `fetchDiscussions(owner, after?)`
++  - 查询 `repository(owner, name: process.env.REPOSITORY).discussions(first: 100, after?, orderBy...)`
++- `fetchAllDiscussions(user)`
++  - 通过 `pageInfo.hasNextPage/endCursor` 循环分页拉取
++
++### 1.3 `converter.ts`：Front matter 合成
++
++代码：[converter.ts](file:///workspace/.scripts/pre/converter.ts#L4-L30)
++
++- `splitMdx(mdx: string): [md: string] | [md: string, frontMatter: any]`
++  - 使用 `--- ... ---` 分隔并 `YAML.parse`
++- `convertFrontMatter(list)`
++  - 把 `{ number, title, publishedAt, lastEditedAt, url, labels }` 与原 front matter 合并
++  - 生成新的 `---\nYAML.stringify(frontMatter)---` 前缀并拼回 body
++
++### 1.4 `filter.ts`：分类与配置
++
++代码：[filter.ts](file:///workspace/.scripts/pre/filter.ts#L5-L29)
++
++- `findConfig(list)`
++  - 查找 `category.name === CONFIG_CATEGORY && title === 'index'` 的 discussion body
++  - `dotenv.parse()` 解析为 key-value
++- `filterPage(list)` / `filterPost(list)`
++  - 根据 `PAGE_CATEGORY` / `POST_CATEGORY` 过滤
++
++### 1.5 `writer.ts`：落盘
++
++代码：[writer.ts](file:///workspace/.scripts/pre/writer.ts#L5-L33)
++
++- `writePosts(list)`
++  - 写入 `./src/routes/post/_source/{number}.md`
++- `writePages(list)`
++  - 写入 `./src/routes/_page/{title}.md`
++- `writeEnv(config)`
++  - 写入 `./.env.local`，键统一加 `VITE_` 前缀
++
++## 2. 运行期（Site Runtime）
++
++### 2.1 `fetchPosts.ts`：文章聚合与查询
++
++代码：[fetchPosts.ts](file:///workspace/src/lib/helper/fetchPosts.ts#L9-L76)
++
++- `fetchPosts({ offset?, limit?, label? })`
++  - 通过 `import.meta.glob('../../routes/post/_source/*.md')` 枚举所有 markdown 模块
++  - 并行 `await page()` 获取 `{ metadata, default: component }`
++  - 按 `metadata.published` 倒序排序
++  - `label` 过滤：`metadata.labels[].name` 包含目标标签
++  - `offset/limit` 支持分页截取
++  - 返回 `{ list, count }`
++- `fetchLabels()`
++  - 基于 `fetchPosts()` 的结果统计标签频次，返回 `Array<[label, count]>`
++- `fetchPost(path)`
++  - 按 `metadata.path === path` 或 `metadata.number` 等于 path 字符串匹配
++
++### 2.2 `fetchPage.ts`：页面聚合与查询
++
++代码：[fetchPage.ts](file:///workspace/src/lib/helper/fetchPage.ts#L9-L30)
++
++- `fetchPages()`
++  - 通过 `import.meta.glob('../../routes/_page/*.md')` 枚举页面 markdown 模块
++  - 过滤 `metadata.title === '__error'`
++  - 按 `metadata.priority` 倒序排序（用于 Footer/Nav 的展示优先级）
++- `fetchPage(path)`
++  - `path === metadata.path` 或 `path === title.toLowerCase()` 匹配
++
++### 2.3 路由参数匹配：`generateMatcher` + `pageMatcher`
++
++- `generateMatcher(paramPattern)`：[matcher.ts](file:///workspace/src/lib/helper/matcher.ts#L1-L11)
++  - 基于 `path-to-regexp` 的 `match()` 生成“字符串路径 → params”解析器
++- `listMatcher(param)`：[pageMatcher.ts](file:///workspace/src/params/pageMatcher.ts#L4-L7)
++  - 支持两种形式：
++    - `label/:label{/page/:page(\d+)}?`
++    - `{page/:page(\d+)}?`
++- `match(param)`：[pageMatcher.ts](file:///workspace/src/params/pageMatcher.ts#L8-L13)
++  - 用于 SvelteKit `[...index=pageMatcher]` 路由校验：禁止 `page <= 1`
++
++### 2.4 关键路由 `load()` 入口
++
++- 列表页：[[...index=pageMatcher].svelte](file:///workspace/src/routes/%5B...index=pageMatcher%5D.svelte#L1-L46)
++  - 从 `params.index` 得到 `{ label, page }`
++  - 并行加载：`fetchPosts({ offset, limit, label })` 与 `fetchLabels()`
++- 文章页：[[post]@withoutHeader.svelte](file:///workspace/src/routes/post/%5Bpost%5D@withoutHeader.svelte#L1-L37)
++  - `fetchPost(params.post)`，不存在则 404
++  - 用 `readableDate()` 格式化 `published/updated`
++- 页面：[[page].svelte](file:///workspace/src/routes/%5Bpage%5D.svelte#L1-L18)
++  - `fetchPage(params.page)`，不存在则 404
++
++### 2.5 服务端 Hook：页面语言注入
++
++代码：[hooks.server.ts](file:///workspace/src/hooks.server.ts#L6-L34)
++
++- 通过 route id 分支决定是否读取 `metadata.lang`
++  - `post/[post]@withoutHeader` → `fetchPost(params.post)?.metadata.lang`
++  - `[page]` → `fetchPage(params.page)?.metadata.lang`
++- 在 `resolve(..., { transformPageChunk })` 阶段替换 `app.html` 中的 `%lang%`
++
++## 3. 核心类型（内容元数据）
++
++- [BasePageType](file:///workspace/src/lib/types/base.ts#L1-L14)
++  - “GitHub 元信息 + 自定义扩展”的统一基类接口
++- [Post](file:///workspace/src/lib/types/post.ts#L1-L6)
++  - `labels?: { name; color }[]`
++  - `timezone?: string`
++- [Page](file:///workspace/src/lib/types/page.ts#L1-L5)
++  - `priority?: number`
+diff --git a/docs/code-wiki/modules.md b/docs/code-wiki/modules.md
+new file mode 100644
+index 0000000..08c3dfe
+--- /dev/null
++++ b/docs/code-wiki/modules.md
+@@ -0,0 +1,84 @@
++# 模块与目录职责
++
++## 1. 顶层目录
++
++| 路径                                  | 职责                                                 |
++| ------------------------------------- | ---------------------------------------------------- |
++| `src/`                                | 站点源码（SvelteKit 路由、组件、业务逻辑、类型定义） |
++| `.scripts/`                           | 构建期数据生成与构建后处理脚本                       |
++| `static/`                             | 静态资源（favicon 等）                               |
++| `.github/workflows/`                  | CI 工作流（lint、CodeQL、自动合并等）                |
++| `svelte.config.js` / `vite.config.ts` | 框架构建配置（adapter-static、mdsvex、Vite 插件等）  |
++
++## 2. `src/` 目录
++
++### 2.1 路由层：`src/routes/`
++
++SvelteKit 路由目录直接决定站点 URL 结构与渲染方式。
++
++- **列表页（首页/分页/标签页统一入口）**：[[...index=pageMatcher].svelte](file:///workspace/src/routes/%5B...index=pageMatcher%5D.svelte)
++  - 解析参数：`src/params/pageMatcher.ts`（SvelteKit ParamMatcher）
++  - 加载数据：`fetchPosts` / `fetchLabels`
++  - 渲染组件：`AboutSection / LabelsSection / PostsSection / Pagination`
++- **文章详情页**：[[post]@withoutHeader.svelte](file:///workspace/src/routes/post/%5Bpost%5D@withoutHeader.svelte)
++  - 路由参数：`params.post`（可为 `metadata.path` 或 discussion number 字符串）
++  - 加载数据：`fetchPost`，并用 `readableDate` 格式化时间
++- **独立页面**：[[page].svelte](file:///workspace/src/routes/%5Bpage%5D.svelte)
++  - 路由参数：`params.page`（匹配 `metadata.path` 或 `title.toLowerCase()`）
++  - 加载数据：`fetchPage`
++- **Atom feed**：[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts)
++  - 依赖：`feed` 包 + `fetchPosts`；缺少 `DOMAIN` 时 302 到 `/`
++- **Markdown 布局**：[\_\_layout-md.svelte](file:///workspace/src/routes/__layout-md.svelte)
++  - mdsvex `layout` 配置指向该文件（见 [svelte.config.js](file:///workspace/svelte.config.js#L21-L33)）
++
++### 2.2 组件层：`src/lib/components/`
++
++以“页面骨架组件 + 内容组件 + 小型交互组件”为主，供路由页面组合。
++
++- **文章容器**：[Article.svelte](file:///workspace/src/lib/components/Article.svelte)
++- **分页**：[Pagination.svelte](file:///workspace/src/lib/components/Pagination.svelte)
++- **评论（Giscus）**：[Giscus.svelte](file:///workspace/src/lib/components/Giscus.svelte)
++- **页面元信息**：[PageMeta.svelte](file:///workspace/src/lib/components/PageMeta.svelte)
++- **页脚与导航**：[Footer.svelte](file:///workspace/src/lib/components/Footer.svelte) / [Nav.svelte](file:///workspace/src/lib/components/Nav.svelte)
++
++### 2.3 业务工具：`src/lib/helper/`
++
++聚焦“从 Markdown 模块加载并组织数据”与“路由参数解析”。
++
++- posts 聚合/分页/标签：
++  - [fetchPosts.ts](file:///workspace/src/lib/helper/fetchPosts.ts)
++  - `fetchPosts({ offset, limit, label })`：核心列表聚合与过滤
++  - `fetchLabels()`：基于 posts 统计标签频次
++  - `fetchPost(path)`：按 `metadata.path` 或 `number` 查找
++- pages 聚合/排序：
++  - [fetchPage.ts](file:///workspace/src/lib/helper/fetchPage.ts)
++  - `fetchPages()`：过滤 `__error` 并按 `priority` 排序
++  - `fetchPage(path)`：按 `metadata.path` 或 `title.toLowerCase()` 查找
++- 路由参数匹配：
++  - [matcher.ts](file:///workspace/src/lib/helper/matcher.ts) 提供 `generateMatcher()`
++  - [pageMatcher.ts](file:///workspace/src/params/pageMatcher.ts) 组合出 `labelsMatcher/indexMatcher`
++
++### 2.4 类型与常量
++
++- 类型：
++  - [BasePageType](file:///workspace/src/lib/types/base.ts)
++  - [Post](file:///workspace/src/lib/types/post.ts)
++  - [Page](file:///workspace/src/lib/types/page.ts)
++- 运行时常量（来自 `VITE_*`）：
++  - [constants.ts](file:///workspace/src/lib/constants.ts)
++
++## 3. `.scripts/`（构建期脚本）
++
++### 3.1 `.scripts/pre/`：构建前生成内容
++
++入口：[.scripts/pre/index.ts](file:///workspace/.scripts/pre/index.ts)
++
++- `fetcher.ts`：GitHub GraphQL 拉取 viewer 与 discussions
++- `filter.ts`：按 Discussions Category 分类 + 解析配置 discussion
++- `converter.ts`：合并/生成 front matter（YAML）
++- `writer.ts`：写入 Markdown 源文件与 `.env.local`
++
++### 3.2 `.scripts/post/`：构建后生成 sitemap
++
++- 入口：[.scripts/post/index.ts](file:///workspace/.scripts/post/index.ts)
++- 行为：若 `.env.local` 中 `VITE_DOMAIN` 存在则调用 `svelte-sitemap` 生成 sitemap
+diff --git a/docs/code-wiki/runbook.md b/docs/code-wiki/runbook.md
+new file mode 100644
+index 0000000..deb5adf
+--- /dev/null
++++ b/docs/code-wiki/runbook.md
+@@ -0,0 +1,106 @@
++# 运行与部署手册（Runbook）
++
++## 1. 前置条件
++
++- Node.js `>=22`（见 [package.json](file:///workspace/package.json#L4-L6)）
++- 已启用 GitHub Discussions 的目标仓库
++- 一个可访问 GraphQL API 的 Token（`GITHUB_TOKEN`）
++  - 公共仓库通常需要 `public_repo` scope
++  - 私有仓库通常需要 `repo` scope
++
++## 2. 必需环境变量
++
++| 变量           | 作用                     | 用在何处                                                        |
++| -------------- | ------------------------ | --------------------------------------------------------------- |
++| `GITHUB_TOKEN` | GraphQL 拉取 discussions | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L7-L18)  |
++| `REPOSITORY`   | 目标仓库名（不含 owner） | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L57-L61) |
++
++建议将它们放在本地 `.env`（不提交到仓库）。
++
++## 3. 可选配置（生成到 `VITE_*`）
++
++构建前脚本会把配置写到 `.env.local`（[writeEnv](file:///workspace/.scripts/pre/writer.ts#L28-L33)），前端通过 [constants.ts](file:///workspace/src/lib/constants.ts) 读取。
++
++常用键（不区分来源：可来自环境变量或“配置 discussion”）：
++
++- `CONFIG_CATEGORY`：配置 category（默认 `Config`）
++- `POST_CATEGORY`：文章 category（默认 `Post`）
++- `PAGE_CATEGORY`：页面 category（默认 `Page`）
++- `PAGE_SIZE`：列表分页大小
++- `BLOG_NAME` / `BIO` / `EMAIL` / `TWITTER` / `DESCRIPTION` / `KEYWORDS`
++- `DOMAIN`：站点域名；影响 Atom feed 与 sitemap
++- `LANGUAGE`：默认语言（用于 HTML `lang`）
++- `COMMENT`：默认是否启用评论
++- `TIMEZONE`：日期格式化时区
++
++配置优先级见 [.scripts/pre/index.ts](file:///workspace/.scripts/pre/index.ts#L18-L35)：
++
++1. 配置 discussion（`findConfig()` 解析结果）
++2. 环境变量 `process.env.*`
++3. 内置默认值（部分来自 GitHub viewer）
++
++## 4. GitHub Discussions 约定
++
++### 4.1 分类（Categories）
++
++默认使用三个分类（可用环境变量覆盖）：
++
++- `Config`：仅使用 `title=index` 的 discussion 作为配置文本（dotenv 格式）
++- `Post`：文章 discussions
++- `Page`：页面 discussions
++
++分类筛选逻辑见 [filter.ts](file:///workspace/.scripts/pre/filter.ts#L5-L29)。
++
++### 4.2 内容落盘路径
++
++由构建前脚本生成：
++
++- posts：`src/routes/post/_source/[discussion number].md`
++- pages：`src/routes/_page/[title].md`
++
++写入逻辑见 [writer.ts](file:///workspace/.scripts/pre/writer.ts#L5-L26)。
++
++## 5. 本地开发
++
++```bash
++npm ci
++npm run generateData
++npm run dev
++```
++
++说明：
++
++- `generateData` 需要能访问 GitHub API，否则会在 `fetcher.ts` 抛错
++- `dev` 运行时读取的是本地生成的 markdown 源文件
++
++## 6. 构建与预览
++
++```bash
++npm run build
++npm run preview
++```
++
++- `build` 会依次执行：
++  - `.scripts/pre/index.ts`（生成 markdown + `.env.local`）
++  - `vite build`（SvelteKit 静态构建，输出到 `build/`）
++  - `.scripts/post/index.ts`（若设置了 `DOMAIN` 则生成 sitemap）
++  - 见 [package.json scripts](file:///workspace/package.json#L7-L18)
++
++## 7. 部署
++
++该项目输出目录为 `build/`，适合部署到静态站点托管：
++
++- Vercel / Netlify / Cloudflare Pages 等
++
++建议：
++
++- 在托管平台设置环境变量 `GITHUB_TOKEN`、`REPOSITORY`（以及可选配置）
++- 触发构建时执行 `npm run build`
++- 如需“内容更新自动触发部署”，可使用 GitHub Discussions 的 webhook + 平台的 deploy hook（参考仓库 [README](file:///workspace/README.md#L73-L99)）
++
++## 8. 常见问题定位
++
++- 构建前脚本报 `GitHub Token 未设置`：检查 `GITHUB_TOKEN`
++- `fetchDiscussions` 取不到仓库：检查 `REPOSITORY` 是否正确、token 权限是否足够
++- Atom feed 不生效：检查是否设置 `DOMAIN`（缺失会 302 回 `/`，见 [atom.xml.ts](file:///workspace/src/routes/atom.xml.ts#L6-L10)）
++- sitemap 不生成：检查 `.env.local` 里是否存在 `VITE_DOMAIN`（见 [.scripts/post/index.ts](file:///workspace/.scripts/post/index.ts#L5-L12)）
+diff --git a/eslint.config.js b/eslint.config.js
+new file mode 100644
+index 0000000..99f55e4
+--- /dev/null
++++ b/eslint.config.js
+@@ -0,0 +1,55 @@
++import eslint from '@eslint/js';
++import tseslint from 'typescript-eslint';
++import eslintPluginSvelte from 'eslint-plugin-svelte';
++import eslintConfigPrettier from 'eslint-config-prettier';
++import globals from 'globals';
++
++export default tseslint.config(
++	eslint.configs.recommended,
++	...tseslint.configs.recommended,
++	...eslintPluginSvelte.configs['flat/recommended'],
++	eslintConfigPrettier,
++	{
++		ignores: [
++			'.DS_Store',
++			'node_modules/**',
++			'build/**',
++			'.svelte-kit/**',
++			'package/**',
++			'.env',
++			'.env.*',
++			'!.env.example',
++			'pnpm-lock.yaml',
++			'package-lock.json',
++			'yarn.lock',
++			'**/*.cjs'
++		]
++	},
++	{
++		files: ['**/*.svelte'],
++		languageOptions: {
++			parserOptions: {
++				parser: tseslint.parser
++			}
++		}
++	},
++	{
++		languageOptions: {
++			ecmaVersion: 2020,
++			sourceType: 'module',
++			globals: {
++				...globals.browser,
++				...globals.node,
++				...globals.es2017
++			}
++		},
++		rules: {
++			'@typescript-eslint/no-explicit-any': 'off',
++			'@typescript-eslint/no-unused-expressions': 'off',
++			'@typescript-eslint/no-unused-vars': 'off',
++			'svelte/no-navigation-without-resolve': 'off',
++			'svelte/no-svelte-internal': 'off',
++			'no-constant-condition': 'off'
++		}
++	}
++);
+diff --git a/package-lock.json b/package-lock.json
+index 23d78f6..dc20837 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -8,6 +8,7 @@
+ 			"name": "svelte-blog",
+ 			"version": "0.0.2",
+ 			"devDependencies": {
++				"@eslint/js": "^10.0.1",
+ 				"@fortawesome/fontawesome-free": "^7.2.0",
+ 				"@giscus/svelte": "^3.1.0",
+ 				"@sveltejs/adapter-static": "^3.0.10",
+@@ -26,6 +27,7 @@
+ 				"eslint-config-prettier": "^10.1.8",
+ 				"eslint-plugin-svelte": "^3.17.0",
+ 				"feed": "^5.2.0",
++				"globals": "^17.5.0",
+ 				"mdsvex": "^0.12.7",
+ 				"node-fetch": "^3.3.2",
+ 				"path-to-regexp": "^8.2.0",
+@@ -46,11 +48,12 @@
+ 				"tslib": "^2.8.1",
+ 				"tsx": "^4.21.0",
+ 				"typescript": "5.9.3",
++				"typescript-eslint": "^8.59.0",
+ 				"vite": "^8.0.0",
+ 				"yaml": "^2.7.1"
+ 			},
+ 			"engines": {
+-				"node": ">=22"
++				"node": ">=24"
+ 			}
+ 		},
+ 		"node_modules/@emnapi/core": {
+@@ -599,6 +602,27 @@
+ 				"node": "^20.19.0 || ^22.13.0 || >=24"
+ 			}
+ 		},
++		"node_modules/@eslint/js": {
++			"version": "10.0.1",
++			"resolved": "https://registry.npmjs.org/@eslint/js/-/js-10.0.1.tgz",
++			"integrity": "sha512-zeR9k5pd4gxjZ0abRoIaxdc7I3nDktoXZk2qOv9gCNWx3mVwEn32VRhyLaRsDiJjTs0xq/T8mfPtyuXu7GWBcA==",
++			"dev": true,
++			"license": "MIT",
++			"engines": {
++				"node": "^20.19.0 || ^22.13.0 || >=24"
++			},
++			"funding": {
++				"url": "https://eslint.org/donate"
++			},
++			"peerDependencies": {
++				"eslint": "^10.0.0"
++			},
++			"peerDependenciesMeta": {
++				"eslint": {
++					"optional": true
++				}
++			}
++		},
+ 		"node_modules/@eslint/object-schema": {
+ 			"version": "3.0.5",
+ 			"resolved": "https://registry.npmjs.org/@eslint/object-schema/-/object-schema-3.0.5.tgz",
+@@ -983,9 +1007,6 @@
+ 				"arm64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1003,9 +1024,6 @@
+ 				"arm64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"musl"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1023,9 +1041,6 @@
+ 				"ppc64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1043,9 +1058,6 @@
+ 				"s390x"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1063,9 +1075,6 @@
+ 				"x64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1083,9 +1092,6 @@
+ 				"x64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"musl"
+-			],
+ 			"license": "MIT",
+ 			"optional": true,
+ 			"os": [
+@@ -1387,17 +1393,17 @@
+ 			"license": "MIT"
+ 		},
+ 		"node_modules/@typescript-eslint/eslint-plugin": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.58.2.tgz",
+-			"integrity": "sha512-aC2qc5thQahutKjP+cl8cgN9DWe3ZUqVko30CMSZHnFEHyhOYoZSzkGtAI2mcwZ38xeImDucI4dnqsHiOYuuCw==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.59.0.tgz",
++			"integrity": "sha512-HyAZtpdkgZwpq8Sz3FSUvCR4c+ScbuWa9AksK2Jweub7w4M3yTz4O11AqVJzLYjy/B9ZWPyc81I+mOdJU/bDQw==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+ 				"@eslint-community/regexpp": "^4.12.2",
+-				"@typescript-eslint/scope-manager": "8.58.2",
+-				"@typescript-eslint/type-utils": "8.58.2",
+-				"@typescript-eslint/utils": "8.58.2",
+-				"@typescript-eslint/visitor-keys": "8.58.2",
++				"@typescript-eslint/scope-manager": "8.59.0",
++				"@typescript-eslint/type-utils": "8.59.0",
++				"@typescript-eslint/utils": "8.59.0",
++				"@typescript-eslint/visitor-keys": "8.59.0",
+ 				"ignore": "^7.0.5",
+ 				"natural-compare": "^1.4.0",
+ 				"ts-api-utils": "^2.5.0"
+@@ -1410,22 +1416,22 @@
+ 				"url": "https://opencollective.com/typescript-eslint"
+ 			},
+ 			"peerDependencies": {
+-				"@typescript-eslint/parser": "^8.58.2",
++				"@typescript-eslint/parser": "^8.59.0",
+ 				"eslint": "^8.57.0 || ^9.0.0 || ^10.0.0",
+ 				"typescript": ">=4.8.4 <6.1.0"
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/parser": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/parser/-/parser-8.58.2.tgz",
+-			"integrity": "sha512-/Zb/xaIDfxeJnvishjGdcR4jmr7S+bda8PKNhRGdljDM+elXhlvN0FyPSsMnLmJUrVG9aPO6dof80wjMawsASg==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/parser/-/parser-8.59.0.tgz",
++			"integrity": "sha512-TI1XGwKbDpo9tRW8UDIXCOeLk55qe9ZFGs8MTKU6/M08HWTw52DD/IYhfQtOEhEdPhLMT26Ka/x7p70nd3dzDg==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/scope-manager": "8.58.2",
+-				"@typescript-eslint/types": "8.58.2",
+-				"@typescript-eslint/typescript-estree": "8.58.2",
+-				"@typescript-eslint/visitor-keys": "8.58.2",
++				"@typescript-eslint/scope-manager": "8.59.0",
++				"@typescript-eslint/types": "8.59.0",
++				"@typescript-eslint/typescript-estree": "8.59.0",
++				"@typescript-eslint/visitor-keys": "8.59.0",
+ 				"debug": "^4.4.3"
+ 			},
+ 			"engines": {
+@@ -1441,14 +1447,14 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/project-service": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/project-service/-/project-service-8.58.2.tgz",
+-			"integrity": "sha512-Cq6UfpZZk15+r87BkIh5rDpi38W4b+Sjnb8wQCPPDDweS/LRCFjCyViEbzHk5Ck3f2QDfgmlxqSa7S7clDtlfg==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/project-service/-/project-service-8.59.0.tgz",
++			"integrity": "sha512-Lw5ITrR5s5TbC19YSvlr63ZfLaJoU6vtKTHyB0GQOpX0W7d5/Ir6vUahWi/8Sps/nOukZQ0IB3SmlxZnjaKVnw==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/tsconfig-utils": "^8.58.2",
+-				"@typescript-eslint/types": "^8.58.2",
++				"@typescript-eslint/tsconfig-utils": "^8.59.0",
++				"@typescript-eslint/types": "^8.59.0",
+ 				"debug": "^4.4.3"
+ 			},
+ 			"engines": {
+@@ -1463,14 +1469,14 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/scope-manager": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/scope-manager/-/scope-manager-8.58.2.tgz",
+-			"integrity": "sha512-SgmyvDPexWETQek+qzZnrG6844IaO02UVyOLhI4wpo82dpZJY9+6YZCKAMFzXb7qhx37mFK1QcPQ18tud+vo6Q==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/scope-manager/-/scope-manager-8.59.0.tgz",
++			"integrity": "sha512-UzR16Ut8IpA3Mc4DbgAShlPPkVm8xXMWafXxB0BocaVRHs8ZGakAxGRskF7FId3sdk9lgGD73GSFaWmWFDE4dg==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/types": "8.58.2",
+-				"@typescript-eslint/visitor-keys": "8.58.2"
++				"@typescript-eslint/types": "8.59.0",
++				"@typescript-eslint/visitor-keys": "8.59.0"
+ 			},
+ 			"engines": {
+ 				"node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+@@ -1481,9 +1487,9 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/tsconfig-utils": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.58.2.tgz",
+-			"integrity": "sha512-3SR+RukipDvkkKp/d0jP0dyzuls3DbGmwDpVEc5wqk5f38KFThakqAAO0XMirWAE+kT00oTauTbzMFGPoAzB0A==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.59.0.tgz",
++			"integrity": "sha512-91Sbl3s4Kb3SybliIY6muFBmHVv+pYXfybC4Oolp3dvk8BvIE3wOPc+403CWIT7mJNkfQRGtdqghzs2+Z91Tqg==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"engines": {
+@@ -1498,15 +1504,15 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/type-utils": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/type-utils/-/type-utils-8.58.2.tgz",
+-			"integrity": "sha512-Z7EloNR/B389FvabdGeTo2XMs4W9TjtPiO9DAsmT0yom0bwlPyRjkJ1uCdW1DvrrrYP50AJZ9Xc3sByZA9+dcg==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/type-utils/-/type-utils-8.59.0.tgz",
++			"integrity": "sha512-3TRiZaQSltGqGeNrJzzr1+8YcEobKH9rHnqIp/1psfKFmhRQDNMGP5hBufanYTGznwShzVLs3Mz+gDN7HkWfXg==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/types": "8.58.2",
+-				"@typescript-eslint/typescript-estree": "8.58.2",
+-				"@typescript-eslint/utils": "8.58.2",
++				"@typescript-eslint/types": "8.59.0",
++				"@typescript-eslint/typescript-estree": "8.59.0",
++				"@typescript-eslint/utils": "8.59.0",
+ 				"debug": "^4.4.3",
+ 				"ts-api-utils": "^2.5.0"
+ 			},
+@@ -1523,9 +1529,9 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/types": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/types/-/types-8.58.2.tgz",
+-			"integrity": "sha512-9TukXyATBQf/Jq9AMQXfvurk+G5R2MwfqQGDR2GzGz28HvY/lXNKGhkY+6IOubwcquikWk5cjlgPvD2uAA7htQ==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/types/-/types-8.59.0.tgz",
++			"integrity": "sha512-nLzdsT1gdOgFxxxwrlNVUBzSNBEEHJ86bblmk4QAS6stfig7rcJzWKqCyxFy3YRRHXDWEkb2NralA1nOYkkm/A==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"engines": {
+@@ -1537,16 +1543,16 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/typescript-estree": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/typescript-estree/-/typescript-estree-8.58.2.tgz",
+-			"integrity": "sha512-ELGuoofuhhoCvNbQjFFiobFcGgcDCEm0ThWdmO4Z0UzLqPXS3KFvnEZ+SHewwOYHjM09tkzOWXNTv9u6Gqtyuw==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/typescript-estree/-/typescript-estree-8.59.0.tgz",
++			"integrity": "sha512-O9Re9P1BmBLFJyikRbQpLku/QA3/AueZNO9WePLBwQrvkixTmDe8u76B6CYUAITRl/rHawggEqUGn5QIkVRLMw==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/project-service": "8.58.2",
+-				"@typescript-eslint/tsconfig-utils": "8.58.2",
+-				"@typescript-eslint/types": "8.58.2",
+-				"@typescript-eslint/visitor-keys": "8.58.2",
++				"@typescript-eslint/project-service": "8.59.0",
++				"@typescript-eslint/tsconfig-utils": "8.59.0",
++				"@typescript-eslint/types": "8.59.0",
++				"@typescript-eslint/visitor-keys": "8.59.0",
+ 				"debug": "^4.4.3",
+ 				"minimatch": "^10.2.2",
+ 				"semver": "^7.7.3",
+@@ -1565,16 +1571,16 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/utils": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/utils/-/utils-8.58.2.tgz",
+-			"integrity": "sha512-QZfjHNEzPY8+l0+fIXMvuQ2sJlplB4zgDZvA+NmvZsZv3EQwOcc1DuIU1VJUTWZ/RKouBMhDyNaBMx4sWvrzRA==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/utils/-/utils-8.59.0.tgz",
++			"integrity": "sha512-I1R/K7V07XsMJ12Oaxg/O9GfrysGTmCRhvZJBv0RE0NcULMzjqVpR5kRRQjHsz3J/bElU7HwCO7zkqL+MSUz+g==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+ 				"@eslint-community/eslint-utils": "^4.9.1",
+-				"@typescript-eslint/scope-manager": "8.58.2",
+-				"@typescript-eslint/types": "8.58.2",
+-				"@typescript-eslint/typescript-estree": "8.58.2"
++				"@typescript-eslint/scope-manager": "8.59.0",
++				"@typescript-eslint/types": "8.59.0",
++				"@typescript-eslint/typescript-estree": "8.59.0"
+ 			},
+ 			"engines": {
+ 				"node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+@@ -1589,13 +1595,13 @@
+ 			}
+ 		},
+ 		"node_modules/@typescript-eslint/visitor-keys": {
+-			"version": "8.58.2",
+-			"resolved": "https://registry.npmjs.org/@typescript-eslint/visitor-keys/-/visitor-keys-8.58.2.tgz",
+-			"integrity": "sha512-f1WO2Lx8a9t8DARmcWAUPJbu0G20bJlj8L4z72K00TMeJAoyLr/tHhI/pzYBLrR4dXWkcxO1cWYZEOX8DKHTqA==",
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/@typescript-eslint/visitor-keys/-/visitor-keys-8.59.0.tgz",
++			"integrity": "sha512-/uejZt4dSere1bx12WLlPfv8GktzcaDtuJ7s42/HEZ5zGj9oxRaD4bj7qwSunXkf+pbAhFt2zjpHYUiT5lHf0Q==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"dependencies": {
+-				"@typescript-eslint/types": "8.58.2",
++				"@typescript-eslint/types": "8.59.0",
+ 				"eslint-visitor-keys": "^5.0.0"
+ 			},
+ 			"engines": {
+@@ -2332,6 +2338,19 @@
+ 				}
+ 			}
+ 		},
++		"node_modules/eslint-plugin-svelte/node_modules/globals": {
++			"version": "16.5.0",
++			"resolved": "https://registry.npmjs.org/globals/-/globals-16.5.0.tgz",
++			"integrity": "sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==",
++			"dev": true,
++			"license": "MIT",
++			"engines": {
++				"node": ">=18"
++			},
++			"funding": {
++				"url": "https://github.com/sponsors/sindresorhus"
++			}
++		},
+ 		"node_modules/eslint-scope": {
+ 			"version": "9.1.2",
+ 			"resolved": "https://registry.npmjs.org/eslint-scope/-/eslint-scope-9.1.2.tgz",
+@@ -2750,9 +2769,9 @@
+ 			}
+ 		},
+ 		"node_modules/globals": {
+-			"version": "16.5.0",
+-			"resolved": "https://registry.npmjs.org/globals/-/globals-16.5.0.tgz",
+-			"integrity": "sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==",
++			"version": "17.5.0",
++			"resolved": "https://registry.npmjs.org/globals/-/globals-17.5.0.tgz",
++			"integrity": "sha512-qoV+HK2yFl/366t2/Cb3+xxPUo5BuMynomoDmiaZBIdbs+0pYbjfZU+twLhGKp4uCZ/+NbtpVepH5bGCxRyy2g==",
+ 			"dev": true,
+ 			"license": "MIT",
+ 			"engines": {
+@@ -3231,9 +3250,6 @@
+ 				"arm64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MPL-2.0",
+ 			"optional": true,
+ 			"os": [
+@@ -3255,9 +3271,6 @@
+ 				"arm64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"musl"
+-			],
+ 			"license": "MPL-2.0",
+ 			"optional": true,
+ 			"os": [
+@@ -3279,9 +3292,6 @@
+ 				"x64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"glibc"
+-			],
+ 			"license": "MPL-2.0",
+ 			"optional": true,
+ 			"os": [
+@@ -3303,9 +3313,6 @@
+ 				"x64"
+ 			],
+ 			"dev": true,
+-			"libc": [
+-				"musl"
+-			],
+ 			"license": "MPL-2.0",
+ 			"optional": true,
+ 			"os": [
+@@ -4740,6 +4747,21 @@
+ 				}
+ 			}
+ 		},
++		"node_modules/svelte-check/node_modules/picomatch": {
++			"version": "4.0.4",
++			"resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz",
++			"integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==",
++			"dev": true,
++			"license": "MIT",
++			"optional": true,
++			"peer": true,
++			"engines": {
++				"node": ">=12"
++			},
++			"funding": {
++				"url": "https://github.com/sponsors/jonschlinkert"
++			}
++		},
+ 		"node_modules/svelte-eslint-parser": {
+ 			"version": "1.6.0",
+ 			"resolved": "https://registry.npmjs.org/svelte-eslint-parser/-/svelte-eslint-parser-1.6.0.tgz",
+@@ -5119,6 +5141,30 @@
+ 				"node": ">=14.17"
+ 			}
+ 		},
++		"node_modules/typescript-eslint": {
++			"version": "8.59.0",
++			"resolved": "https://registry.npmjs.org/typescript-eslint/-/typescript-eslint-8.59.0.tgz",
++			"integrity": "sha512-BU3ONW9X+v90EcCH9ZS6LMackcVtxRLlI3XrYyqZIwVSHIk7Qf7bFw1z0M9Q0IUxhTMZCf8piY9hTYaNEIASrw==",
++			"dev": true,
++			"license": "MIT",
++			"dependencies": {
++				"@typescript-eslint/eslint-plugin": "8.59.0",
++				"@typescript-eslint/parser": "8.59.0",
++				"@typescript-eslint/typescript-estree": "8.59.0",
++				"@typescript-eslint/utils": "8.59.0"
++			},
++			"engines": {
++				"node": "^18.18.0 || ^20.9.0 || >=21.1.0"
++			},
++			"funding": {
++				"type": "opencollective",
++				"url": "https://opencollective.com/typescript-eslint"
++			},
++			"peerDependencies": {
++				"eslint": "^8.57.0 || ^9.0.0 || ^10.0.0",
++				"typescript": ">=4.8.4 <6.1.0"
++			}
++		},
+ 		"node_modules/undici-types": {
+ 			"version": "7.19.2",
+ 			"resolved": "https://registry.npmjs.org/undici-types/-/undici-types-7.19.2.tgz",
+diff --git a/package.json b/package.json
+index f118d9c..739c28e 100644
+--- a/package.json
++++ b/package.json
+@@ -2,7 +2,7 @@
+ 	"name": "svelte-blog",
+ 	"version": "0.0.2",
+ 	"engines": {
+-		"node": ">=22"
++		"node": ">=24"
+ 	},
+ 	"scripts": {
+ 		"dev": "vite dev",
+@@ -13,10 +13,11 @@
+ 		"prepare": "svelte-kit sync",
+ 		"check": "svelte-check --tsconfig ./tsconfig.json",
+ 		"check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
+-		"lint": "prettier --check --plugin-search-dir=. . && eslint .",
+-		"format": "prettier --write --plugin-search-dir=. ."
++		"lint": "prettier --check . && eslint .",
++		"format": "prettier --write ."
+ 	},
+ 	"devDependencies": {
++		"@eslint/js": "^10.0.1",
+ 		"@fortawesome/fontawesome-free": "^7.2.0",
+ 		"@giscus/svelte": "^3.1.0",
+ 		"@sveltejs/adapter-static": "^3.0.10",
+@@ -35,6 +36,7 @@
+ 		"eslint-config-prettier": "^10.1.8",
+ 		"eslint-plugin-svelte": "^3.17.0",
+ 		"feed": "^5.2.0",
++		"globals": "^17.5.0",
+ 		"mdsvex": "^0.12.7",
+ 		"node-fetch": "^3.3.2",
+ 		"path-to-regexp": "^8.2.0",
+@@ -55,6 +57,7 @@
+ 		"tslib": "^2.8.1",
+ 		"tsx": "^4.21.0",
+ 		"typescript": "5.9.3",
++		"typescript-eslint": "^8.59.0",
+ 		"vite": "^8.0.0",
+ 		"yaml": "^2.7.1"
+ 	},
+diff --git a/prettier.config.cjs b/prettier.config.cjs
+index 9d90b86..bedf8d7 100644
+--- a/prettier.config.cjs
++++ b/prettier.config.cjs
+@@ -1,7 +1,8 @@
+ module.exports = {
+-	plugins: [require('prettier-plugin-tailwindcss')],
++	plugins: ['prettier-plugin-svelte', 'prettier-plugin-tailwindcss'],
+ 	useTabs: true,
+ 	singleQuote: true,
+ 	trailingComma: 'none',
+-	printWidth: 100
++	printWidth: 100,
++	overrides: [{ files: '*.svelte', options: { parser: 'svelte' } }]
+ };
+diff --git a/src/app.css b/src/app.css
+index 651e944..d1bf9ec 100644
+--- a/src/app.css
++++ b/src/app.css
+@@ -4,7 +4,7 @@
+ 
+ @layer base {
+ 	a > span.icon.icon-link {
+-		@apply relative opacity-0 transition before:absolute before:-left-[1.5ch] before:pr-[1.5ch] before:content-['#'] group-hover:opacity-100 [@media(any-hover:none)]:opacity-100;
++		@apply relative opacity-0 transition group-hover:opacity-100 before:absolute before:-left-[1.5ch] before:pr-[1.5ch] before:content-['#'] [@media(any-hover:none)]:opacity-100;
+ 	}
+ 
+ 	/* css page scrollbar toggle center no jumping */
+@@ -13,7 +13,7 @@
+ 	}
+ 
+ 	:root {
+-		@apply overflow-y-auto overflow-x-hidden;
++		@apply overflow-x-hidden overflow-y-auto;
+ 	}
+ 
+ 	:root body {
+diff --git a/src/lib/components/Article.svelte b/src/lib/components/Article.svelte
+index 84bb666..7255fb1 100644
+--- a/src/lib/components/Article.svelte
++++ b/src/lib/components/Article.svelte
+@@ -4,7 +4,7 @@
+ </script>
+ 
+ <article
+-	class="prose prose-slate prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg  prose-table:block prose-table:overflow-auto"
++	class="prose prose-slate prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-table:block prose-table:overflow-auto"
+ 	{lang}
+ >
+ 	<slot />
+diff --git a/src/lib/components/BackButton.svelte b/src/lib/components/BackButton.svelte
+index b6e46cd..7561010 100644
+--- a/src/lib/components/BackButton.svelte
++++ b/src/lib/components/BackButton.svelte
+@@ -1,5 +1,5 @@
+ <a
+ 	data-sveltekit-preload-data
+-	class="absolute left-0 top-0 -ml-4 -translate-y-3/4 self-start px-4 py-3 text-xs font-semibold tracking-normal no-underline opacity-0 transition group-hover:opacity-100 [@media(any-hover:none)]:opacity-100"
++	class="absolute top-0 left-0 -ml-4 -translate-y-3/4 self-start px-4 py-3 text-xs font-semibold tracking-normal no-underline opacity-0 transition group-hover:opacity-100 [@media(any-hover:none)]:opacity-100"
+ 	href="/">POSTS /</a
+ >
+diff --git a/src/lib/components/Footer.svelte b/src/lib/components/Footer.svelte
+index 4fdb38c..90ef697 100644
+--- a/src/lib/components/Footer.svelte
++++ b/src/lib/components/Footer.svelte
+@@ -7,7 +7,7 @@
+ </script>
+ 
+ <footer
+-	class="mb-5 mt-12 flex flex-col-reverse items-center justify-between gap-3 text-xs leading-5 text-slate-600 sm:flex-row [&_a]:underline"
++	class="mt-12 mb-5 flex flex-col-reverse items-center justify-between gap-3 text-xs leading-5 text-slate-600 sm:flex-row [&_a]:underline"
+ >
+ 	<div>Powered by <a href={HAKUBA_GITHUB_URL}>Hakuba</a></div>
+ 	<Nav class="text-xs" {pages} />
+diff --git a/src/lib/components/Header.svelte b/src/lib/components/Header.svelte
+index f2b27d4..319e5df 100644
+--- a/src/lib/components/Header.svelte
++++ b/src/lib/components/Header.svelte
+@@ -5,6 +5,6 @@
+ 	export { clazz as class };
+ </script>
+ 
+-<h1 class={clsx('m-0 text-2xl font-bold leading-9 tracking-wide', clazz)}>
++<h1 class={clsx('m-0 text-2xl leading-9 font-bold tracking-wide', clazz)}>
+ 	<slot />
+ </h1>
+diff --git a/src/lib/components/Nav.svelte b/src/lib/components/Nav.svelte
+index 11e049a..daf3504 100644
+--- a/src/lib/components/Nav.svelte
++++ b/src/lib/components/Nav.svelte
+@@ -10,7 +10,7 @@
+ <nav class="z-10">
+ 	<ul
+ 		class={classname(
+-			'-ml-2 flex flex-row divide-x divide-dotted leading-4 child:px-1 first:child:pl-0 last:child:pr-0 [&_a]:py-4 [&_a]:px-2',
++			'child:px-1 first:child:pl-0 last:child:pr-0 -ml-2 flex flex-row divide-x divide-dotted leading-4 [&_a]:px-2 [&_a]:py-4',
+ 			clazz
+ 		)}
+ 	>
+diff --git a/src/lib/components/Pagination.svelte b/src/lib/components/Pagination.svelte
+index b2d250c..29fead2 100644
+--- a/src/lib/components/Pagination.svelte
++++ b/src/lib/components/Pagination.svelte
+@@ -47,7 +47,7 @@
+ 	};
+ </script>
+ 
+-<nav class="mt-8 flex flex-row items-center gap-1 self-center child:p-2">
++<nav class="child:p-2 mt-8 flex flex-row items-center gap-1 self-center">
+ 	{#if hasPrev}
+ 		<a data-sveltekit-preload-data href={to(currentPage - 1)}>
+ 			<img src={chevronLeft} alt="Previous" width="6" height="6" />
+diff --git a/src/routes/post/[post]@withoutHeader.svelte b/src/routes/post/[post]@withoutHeader.svelte
+index 9a1569c..ee66877 100644
+--- a/src/routes/post/[post]@withoutHeader.svelte
++++ b/src/routes/post/[post]@withoutHeader.svelte
+@@ -53,7 +53,7 @@
+ 			{metadata.title}
+ 		</Header>
+ 		<div
+-			class="flex flex-col justify-center [&_*]:!text-sm [&_*]:!font-normal [&_*]:!text-slate-600 "
++			class="flex flex-col justify-center [&_*]:!text-sm [&_*]:!font-normal [&_*]:!text-slate-600"
+ 		>
+ 			<div class=" mt-4 self-start border-t border-t-slate-900 pt-2">
+ 				Published: {published}
