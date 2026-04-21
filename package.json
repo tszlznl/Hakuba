@@ -2,7 +2,7 @@
 	"name": "svelte-blog",
 	"version": "0.0.2",
 	"engines": {
-		"node": ">=22"
+		"node": ">=24"
 	},
 	"scripts": {
 		"dev": "vite dev",
