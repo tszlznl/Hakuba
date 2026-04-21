@@ -47,7 +47,7 @@
 	};
 </script>
 
-<nav class="mt-8 flex flex-row items-center gap-1 self-center child:p-2">
+<nav class="child:p-2 mt-8 flex flex-row items-center gap-1 self-center">
 	{#if hasPrev}
 		<a data-sveltekit-preload-data href={to(currentPage - 1)}>
 			<img src={chevronLeft} alt="Previous" width="6" height="6" />

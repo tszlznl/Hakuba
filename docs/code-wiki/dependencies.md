@@ -24,7 +24,7 @@
 - `rehype-*`：Markdown → HTML 处理链
   - `rehype-slug`：标题生成 id
   - `rehype-autolink-headings`：标题自动链接
-  - `rehype-external-links`：外链 target=_blank
+  - `rehype-external-links`：外链 target=\_blank
   - `rehype-add-classes`：给标题加 class（用于样式）
 - 配置入口：[svelte.config.js](file:///workspace/svelte.config.js#L1-L41)
 
@@ -77,4 +77,3 @@ flowchart TD
 - `src/routes/*` 依赖 `src/lib/*`，避免反向依赖（lib 不引用 routes）
 - `.scripts/*` 独立于 `src/lib/*`（当前已分离），减少构建期与运行期耦合
 - 运行期对内容的读取全部集中在 `src/lib/helper/*`，路由层只做参数解析与 UI 组合
-

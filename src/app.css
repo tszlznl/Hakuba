@@ -4,7 +4,7 @@
 
 @layer base {
 	a > span.icon.icon-link {
-		@apply relative opacity-0 transition before:absolute before:-left-[1.5ch] before:pr-[1.5ch] before:content-['#'] group-hover:opacity-100 [@media(any-hover:none)]:opacity-100;
+		@apply relative opacity-0 transition group-hover:opacity-100 before:absolute before:-left-[1.5ch] before:pr-[1.5ch] before:content-['#'] [@media(any-hover:none)]:opacity-100;
 	}
 
 	/* css page scrollbar toggle center no jumping */
@@ -13,7 +13,7 @@
 	}
 
 	:root {
-		@apply overflow-y-auto overflow-x-hidden;
+		@apply overflow-x-hidden overflow-y-auto;
 	}
 
 	:root body {

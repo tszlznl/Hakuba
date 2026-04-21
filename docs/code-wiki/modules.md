@@ -2,13 +2,13 @@
 
 ## 1. 顶层目录
 
-| 路径 | 职责 |
-| --- | --- |
-| `src/` | 站点源码（SvelteKit 路由、组件、业务逻辑、类型定义） |
-| `.scripts/` | 构建期数据生成与构建后处理脚本 |
-| `static/` | 静态资源（favicon 等） |
-| `.github/workflows/` | CI 工作流（lint、CodeQL、自动合并等） |
-| `svelte.config.js` / `vite.config.ts` | 框架构建配置（adapter-static、mdsvex、Vite 插件等） |
+| 路径                                  | 职责                                                 |
+| ------------------------------------- | ---------------------------------------------------- |
+| `src/`                                | 站点源码（SvelteKit 路由、组件、业务逻辑、类型定义） |
+| `.scripts/`                           | 构建期数据生成与构建后处理脚本                       |
+| `static/`                             | 静态资源（favicon 等）                               |
+| `.github/workflows/`                  | CI 工作流（lint、CodeQL、自动合并等）                |
+| `svelte.config.js` / `vite.config.ts` | 框架构建配置（adapter-static、mdsvex、Vite 插件等）  |
 
 ## 2. `src/` 目录
 
@@ -28,7 +28,7 @@ SvelteKit 路由目录直接决定站点 URL 结构与渲染方式。
   - 加载数据：`fetchPage`
 - **Atom feed**：[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts)
   - 依赖：`feed` 包 + `fetchPosts`；缺少 `DOMAIN` 时 302 到 `/`
-- **Markdown 布局**：[__layout-md.svelte](file:///workspace/src/routes/__layout-md.svelte)
+- **Markdown 布局**：[\_\_layout-md.svelte](file:///workspace/src/routes/__layout-md.svelte)
   - mdsvex `layout` 配置指向该文件（见 [svelte.config.js](file:///workspace/svelte.config.js#L21-L33)）
 
 ### 2.2 组件层：`src/lib/components/`
@@ -82,4 +82,3 @@ SvelteKit 路由目录直接决定站点 URL 结构与渲染方式。
 
 - 入口：[.scripts/post/index.ts](file:///workspace/.scripts/post/index.ts)
 - 行为：若 `.env.local` 中 `VITE_DOMAIN` 存在则调用 `svelte-sitemap` 生成 sitemap
-

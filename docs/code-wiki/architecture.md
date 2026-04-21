@@ -28,14 +28,14 @@ flowchart LR
   M --> N[.scripts/post/index.ts\nsvelte-sitemap]
 ```
 
-## 3. 配置注入链路（VITE_*）
+## 3. 配置注入链路（VITE\_\*）
 
 - `.scripts/pre/index.ts` 将 config 与环境变量合并，最终写入 `.env.local`
   - 入口：[.scripts/pre/index.ts](file:///workspace/.scripts/pre/index.ts)
   - 写入逻辑：[writeEnv](file:///workspace/.scripts/pre/writer.ts#L28-L33)
 - 前端运行时通过 [constants.ts](file:///workspace/src/lib/constants.ts) 使用 `import.meta.env.VITE_*` 读取
 - 典型使用点：
-  - SEO/站点信息：`BLOG_NAME / DESCRIPTION / KEYWORDS`（布局页 [__layout-withoutHeader.svelte](file:///workspace/src/routes/__layout-withoutHeader.svelte#L21-L35)）
+  - SEO/站点信息：`BLOG_NAME / DESCRIPTION / KEYWORDS`（布局页 [\_\_layout-withoutHeader.svelte](file:///workspace/src/routes/__layout-withoutHeader.svelte#L21-L35)）
   - Atom feed：`DOMAIN`（[atom.xml.ts](file:///workspace/src/routes/atom.xml.ts#L6-L10)）
   - 评论：`USER_NAME / REPOSITORY / COMMENT`（[Giscus.svelte](file:///workspace/src/lib/components/Giscus.svelte#L1-L25)）
 
@@ -55,4 +55,3 @@ flowchart LR
 - Hook 在服务端渲染阶段替换 `app.html` 中的 `%lang%` 占位符
 - 逻辑：根据 route id 决定读取 post/page 的 `metadata.lang`，否则回退到 `LANGUAGE`
 - 入口：[hooks.server.ts](file:///workspace/src/hooks.server.ts#L6-L34)
-

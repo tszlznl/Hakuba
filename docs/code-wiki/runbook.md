@@ -10,10 +10,10 @@
 
 ## 2. 必需环境变量
 
-| 变量 | 作用 | 用在何处 |
-| --- | --- | --- |
-| `GITHUB_TOKEN` | GraphQL 拉取 discussions | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L7-L18) |
-| `REPOSITORY` | 目标仓库名（不含 owner） | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L57-L61) |
+| 变量           | 作用                     | 用在何处                                                        |
+| -------------- | ------------------------ | --------------------------------------------------------------- |
+| `GITHUB_TOKEN` | GraphQL 拉取 discussions | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L7-L18)  |
+| `REPOSITORY`   | 目标仓库名（不含 owner） | [fetcher.ts](file:///workspace/.scripts/pre/fetcher.ts#L57-L61) |
 
 建议将它们放在本地 `.env`（不提交到仓库）。
 
@@ -104,4 +104,3 @@ npm run preview
 - `fetchDiscussions` 取不到仓库：检查 `REPOSITORY` 是否正确、token 权限是否足够
 - Atom feed 不生效：检查是否设置 `DOMAIN`（缺失会 302 回 `/`，见 [atom.xml.ts](file:///workspace/src/routes/atom.xml.ts#L6-L10)）
 - sitemap 不生成：检查 `.env.local` 里是否存在 `VITE_DOMAIN`（见 [.scripts/post/index.ts](file:///workspace/.scripts/post/index.ts#L5-L12)）
-
